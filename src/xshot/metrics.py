@@ -32,8 +32,10 @@ def evaluate_probabilistic(
     return out
 
 
-def format_metric_block(rows: list[dict[str, Any]]) -> str:
+def format_metric_block(rows: list[dict[str, Any]], *, title: str | None = None) -> str:
     lines = []
+    if title:
+        lines.append(title)
     for r in rows:
         prim = (
             f"ROC-AUC={r['roc_auc']:.4f}  log-loss={r['log_loss']:.4f}"
@@ -44,3 +46,31 @@ def format_metric_block(rows: list[dict[str, Any]]) -> str:
         )
         lines.append(f"{r['model']}: {prim} | secondary: {sec}")
     return "\n".join(lines)
+
+
+def training_report_text(
+    metrics_val: list[dict[str, Any]],
+    metrics_test: list[dict[str, Any]],
+    *,
+    primary: str | None = None,
+    calibrated_test: dict[str, Any] | None = None,
+) -> str:
+    parts = [
+        format_metric_block(metrics_val, title="validation (model selection)"),
+        "",
+        format_metric_block(metrics_test, title="held-out test"),
+    ]
+    if primary:
+        parts.extend(["", f"primary_model (by val log-loss): {primary}"])
+    if calibrated_test:
+        parts.extend(
+            [
+                "",
+                (
+                    f"calibrated primary on test — "
+                    f"ROC-AUC={calibrated_test['roc_auc']:.4f}  "
+                    f"log-loss={calibrated_test['log_loss']:.4f}"
+                ),
+            ]
+        )
+    return "\n".join(parts)

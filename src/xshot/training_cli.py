@@ -19,8 +19,10 @@ from xshot.datasets import (
     merge_all_context,
     training_manifest_row,
 )
-from xshot.metrics import evaluate_probabilistic, format_metric_block
-from xshot.models.trainers import build_models
+from sklearn.calibration import CalibratedClassifierCV
+
+from xshot.metrics import evaluate_probabilistic, training_report_text
+from xshot.models.trainers import build_models, fit_classifier_pipeline
 from xshot.splits import masks_from_seasons
 
 
@@ -104,8 +106,16 @@ def train_and_eval(
     models_cfg = build_models(X_tr, cat)
     results: list[dict] = []
     fitted: dict[str, object] = {}
+    valid_metrics: list[dict] = []
+
     for name, est in models_cfg.items():
-        est.fit(X_tr, y_tr)
+        fit_classifier_pipeline(name, est, X_tr, y_tr, X_va, y_va)
+        prob_va = est.predict_proba(X_va)[:, 1]
+        row = evaluate_probabilistic(y_va, prob_va, model_name=name)
+        row["split"] = "validation"
+        valid_metrics.append(row)
+
+    for name, est in models_cfg.items():
         prob_te = est.predict_proba(X_te)[:, 1]
         fitted[name] = est
         results.append(evaluate_probabilistic(y_te, prob_te, model_name=name))
@@ -113,12 +123,21 @@ def train_and_eval(
     for name, est in fitted.items():
         joblib.dump(est, out_dir / f"{name}.joblib")
 
-    valid_metrics: list[dict] = []
-    for name, est in fitted.items():
-        prob_va = est.predict_proba(X_va)[:, 1]
-        row = evaluate_probabilistic(y_va, prob_va, model_name=name)
-        row["split"] = "validation"
-        valid_metrics.append(row)
+    primary = min(valid_metrics, key=lambda r: r["log_loss"])["model"]
+    primary_est = fitted[primary]
+    joblib.dump(primary_est, out_dir / "xshot_primary.joblib")
+
+    cal_test_row: dict | None = None
+    try:
+        cal = CalibratedClassifierCV(estimator=primary_est, method="isotonic", cv=3)
+        cal.fit(X_va, y_va)
+    except Exception:
+        cal = CalibratedClassifierCV(estimator=primary_est, method="sigmoid", cv=3)
+        cal.fit(X_va, y_va)
+
+    joblib.dump(cal, out_dir / "xshot_primary_calibrated.joblib")
+    prob_te_cal = cal.predict_proba(X_te)[:, 1]
+    cal_test_row = evaluate_probabilistic(y_te, prob_te_cal, model_name=f"{primary}_calibrated")
 
     summary = {
         "xshot_version": __version__,
@@ -133,11 +152,19 @@ def train_and_eval(
         "split": {"train": train_seasons, "val": val_seasons, "test": test_seasons},
         "metrics_test": results,
         "metrics_val": valid_metrics,
+        "primary_model": primary,
+        "metrics_test_calibrated_primary": cal_test_row,
     }
     (out_dir / "metrics.json").write_text(json.dumps(summary, indent=2))
-    (out_dir / "metrics_human.txt").write_text(format_metric_block(results))
+    human = training_report_text(
+        valid_metrics,
+        results,
+        primary=primary,
+        calibrated_test=cal_test_row,
+    )
+    (out_dir / "metrics_human.txt").write_text(human)
 
-    print(format_metric_block(results))
+    print(human)
     print("\n[Wrote artifacts to]", str(out_dir))
     return results
 
@@ -194,8 +221,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--max-rows",
         type=int,
-        default=40_000,
-        help="Random subsample cap after season filtering (None for all rows).",
+        default=None,
+        help="Random subsample cap (omit or <=0 for full data after season filtering).",
     )
     parser.add_argument(
         "--out-dir",
@@ -222,13 +249,14 @@ def main(argv: list[str] | None = None) -> int:
             )
 
     team_ids = _parse_teams(args.team_ids)
-    max_rows = args.max_rows if args.max_rows and args.max_rows > 0 else None
+    max_rows = (
+        None if args.max_rows is None or args.max_rows <= 0 else args.max_rows
+    )
 
     feature_modes = (
         ["core", "core+advanced"] if args.ablation else [args.features]
     )
 
-    first = True
     for feat in feature_modes:
         out = args.out_dir if len(feature_modes) == 1 else args.out_dir.parent / (
             f"{args.out_dir.name}_{feat.replace('+', '_')}"

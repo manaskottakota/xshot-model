@@ -34,7 +34,7 @@ def _example_row(features: str) -> pd.DataFrame:
             "shooting_team_trailing": 1,
             "clutch_time": 1,
             "is_playoffs": 0,
-            "shot_clock_remaining": np.nan,
+            "shot_clock_remaining": -1.0,
             "shot_clock_known": 0,
             "shot_style_layup": 0,
             "shot_style_dunk": 0,
@@ -89,6 +89,8 @@ def main(argv: list[str] | None = None) -> int:
     model_path = args.model_path
     if model_path is None:
         for cand in (
+            Path("artifacts/run_default/xshot_primary_calibrated.joblib"),
+            Path("artifacts/run_default/xshot_primary.joblib"),
             Path("artifacts/run_default/histogram_gradient_boosting.joblib"),
             Path("artifacts/run_default/xgboost.joblib"),
         ):
@@ -103,5 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     clf = joblib.load(model_path)
     shot = _example_row(args.features)
     prob = clf.predict_proba(shot)[0, 1]
+    src = model_path.name
+    print(f"artifact={src}")
     print(f"Example left-corner 25+ ft jumper (probabilistic FG) → xShot = {prob:.3f}")
     return 0

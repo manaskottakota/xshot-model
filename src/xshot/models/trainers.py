@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 from typing import Any
 
 import pandas as pd
@@ -12,6 +13,17 @@ from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+
+GB_MODEL_NAMES = frozenset({"xgboost", "histogram_gradient_boosting"})
+
+
+def _filter_init_kw(cls: type, kw: dict[str, Any]) -> dict[str, Any]:
+    sig = inspect.signature(cls.__init__)
+    allowed = set(sig.parameters.keys()) - {"self", "kwargs"}
+    out = {k: v for k, v in kw.items() if k in allowed}
+    # XGBoost **kwargs swallows unknowns in some versions — still filter for safety
+    return out
 
 
 def numeric_cat_split(
@@ -104,12 +116,15 @@ def build_gradient_boost(cat_cols: list[str], X_fit: pd.DataFrame) -> tuple[str,
     rf_pre = _rf_pre(cat_cols, X_fit)
     gb_name = "histogram_gradient_boosting"
     clf: Any = HistGradientBoostingClassifier(
-        max_iter=520,
+        max_iter=2000,
         max_depth=12,
         max_leaf_nodes=64,
-        learning_rate=0.05,
+        learning_rate=0.04,
         l2_regularization=1e-2,
         min_samples_leaf=8,
+        early_stopping=True,
+        validation_fraction=0.04,
+        n_iter_no_change=45,
         random_state=42,
     )
 
@@ -117,19 +132,23 @@ def build_gradient_boost(cat_cols: list[str], X_fit: pd.DataFrame) -> tuple[str,
         try:
             from xgboost import XGBClassifier  # type: ignore[import-untyped]
 
-            clf = XGBClassifier(
-                n_estimators=380,
-                max_depth=10,
+            xgb_kw: dict[str, Any] = dict(
+                n_estimators=2000,
+                max_depth=9,
                 learning_rate=0.05,
                 subsample=0.85,
-                colsample_bytree=0.85,
+                colsample_bytree=0.82,
                 reg_lambda=1.8,
                 min_child_weight=3,
                 objective="binary:logistic",
                 random_state=42,
                 enable_categorical=False,
                 verbosity=0,
+                eval_metric="logloss",
             )
+            if "early_stopping_rounds" in inspect.signature(XGBClassifier.__init__).parameters:
+                xgb_kw["early_stopping_rounds"] = 65
+            clf = XGBClassifier(**_filter_init_kw(XGBClassifier, xgb_kw))
             gb_name = "xgboost"
         except Exception:  # pragma: no cover - dlopen / OMP issues
             gb_name = "histogram_gradient_boosting"
@@ -149,3 +168,32 @@ def build_models(X_fit: pd.DataFrame, categorical: list[str], *, rng: Any = None
 
 def estimate_feature_matrix(model: Pipeline, X: pd.DataFrame) -> Any:
     return model.named_steps["pre"].transform(X)
+
+
+def fit_classifier_pipeline(
+    model_name: str,
+    pipe: Pipeline,
+    X_tr: pd.DataFrame,
+    y_tr: Any,
+    X_va: pd.DataFrame,
+    y_va: Any,
+) -> Pipeline:
+    """
+    Train tabular pipelines.
+
+    Tree boosters use validation rows for **XGBoost** early stopping; histogram
+    boosting relies on sklearn's built-in holdout during ``fit``.
+    """
+    if model_name not in GB_MODEL_NAMES:
+        pipe.fit(X_tr, y_tr)
+        return pipe
+
+    pre = pipe.named_steps["pre"]
+    clf = pipe.named_steps["clf"]
+    x_tr = pre.fit_transform(X_tr, y_tr)
+    x_va = pre.transform(X_va)
+    if model_name == "xgboost":
+        clf.fit(x_tr, y_tr, eval_set=[(x_va, y_va)], verbose=False)
+    else:
+        clf.fit(x_tr, y_tr)
+    return pipe
