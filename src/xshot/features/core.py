@@ -17,6 +17,10 @@ def add_core_features(df: pd.DataFrame) -> pd.DataFrame:
     out["shot_angle_rad"] = np.arctan2(lx, np.maximum(np.abs(ly), 1e-3))
 
     out["shot_distance_ft"] = out["SHOT_DISTANCE"].astype(float)
+    out["abs_loc_x_ft"] = np.abs(lx).astype(np.float32)
+    out["lateral_distance_ratio"] = (
+        np.abs(lx.astype(float)) / np.maximum(out["shot_distance_ft"].astype(float), 0.25)
+    ).astype(np.float32)
 
     zb = out["SHOT_ZONE_BASIC"].astype(str)
     out["is_restricted_area"] = (zb == "Restricted Area").astype(np.int8)
@@ -44,11 +48,22 @@ def add_core_features(df: pd.DataFrame) -> pd.DataFrame:
         errors="coerce",
     ).fillna(0.0)
     out["score_diff_shooting_perspective_safe"] = hs
+    out["score_diff_normalized"] = np.clip(hs.astype(float) / 25.0, -2.5, 2.5).astype(
+        np.float32
+    )
     out["shooting_team_ahead"] = (hs > 0).astype(np.int8)
     out["shooting_team_trailing"] = (hs < 0).astype(np.int8)
 
     clutch = (out["period"] >= 4) & (mq <= 5)
     out["clutch_time"] = clutch.astype(np.int8)
+
+    per_f = out["period"].astype(float)
+    slq_f = secs_left_q.astype(np.float64)
+    out["fourth_quarter_clock_pressure"] = np.where(
+        per_f >= 4,
+        np.clip((720.0 - slq_f) / 720.0, 0.0, 1.0),
+        0.0,
+    ).astype(np.float32)
 
     st = out.get("season_type", pd.Series("Regular Season", index=out.index)).astype(
         str
@@ -78,5 +93,13 @@ def add_core_features(df: pd.DataFrame) -> pd.DataFrame:
 
     stype = out["SHOT_TYPE"].astype(str)
     out["is_three"] = stype.str.contains("3PT", na=False).astype(np.int8)
+
+    iq = out["is_three"].astype(np.float64)
+    cl = out["clutch_time"].astype(np.float64)
+    sco = hs.astype(np.float64)
+    out["clutch_three_interaction"] = np.clip(iq * cl, 0.0, 1.0).astype(np.float32)
+    out["trailing_pressure_three"] = (
+        iq * np.clip(-np.minimum(sco, 0.0) / 25.0, 0.0, 2.0)
+    ).astype(np.float32)
 
     return out

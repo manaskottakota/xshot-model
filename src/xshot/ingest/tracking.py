@@ -13,6 +13,8 @@ TRACKING_COLUMNS = [
     "touch_time_sec",
     "defender_loc_x_inches",
     "defender_loc_y_inches",
+    "time_since_catch",
+    "distance_traveled_before_shot",
 ]
 
 
@@ -47,6 +49,8 @@ def merge_tracking_csv(
         "TOUCH_TIME": "touch_time_sec",
         "CLOSEDEF_X": "defender_loc_x_inches",
         "CLOSEDEF_Y": "defender_loc_y_inches",
+        "TIME_SINCE_CATCH": "time_since_catch",
+        "DIST_TRAVELED": "distance_traveled_before_shot",
     }
     rename = {k: v for k, v in colmap.items() if k in tr.columns}
     tr = tr.rename(columns=rename)

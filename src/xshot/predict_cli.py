@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from xshot.datasets import PRIOR_LAST_N_FG_COL, feature_columns
+from xshot.features.tracking_synth import contest_bucket_ix
 
 
 def _example_row(features: str) -> pd.DataFrame:
@@ -22,6 +23,10 @@ def _example_row(features: str) -> pd.DataFrame:
             "loc_y_ft": 8.0,
             "shot_angle_rad": -1.15,
             "shot_distance_ft": 22.0,
+            "abs_loc_x_ft": 22.0,
+            "lateral_distance_ratio": 1.0,
+            "fourth_quarter_clock_pressure": (720.0 - 90.0) / 720.0,
+            "score_diff_normalized": -2.0 / 25.0,
             "is_restricted_area": 0,
             "is_corner_three": 1,
             "is_midrange": 0,
@@ -30,8 +35,6 @@ def _example_row(features: str) -> pd.DataFrame:
             "early_in_quarter": 0,
             "shooting_team_is_home": 1.0,
             "score_diff_shooting_perspective_safe": -2.0,
-            "shooting_team_ahead": 0,
-            "shooting_team_trailing": 1,
             "clutch_time": 1,
             "is_playoffs": 0,
             "shot_clock_remaining": -1.0,
@@ -44,6 +47,8 @@ def _example_row(features: str) -> pd.DataFrame:
             "shot_style_pullup": 0,
             "shot_style_stepback": 0,
             "is_three": 1,
+            "clutch_three_interaction": 1.0,
+            "trailing_pressure_three": 2.0 / 25.0,
             "prior_cum_fg_pct": 0.42,
             "prior_three_attempt_share": 0.55,
             "prior_attempts_global": 400.0,
@@ -51,19 +56,20 @@ def _example_row(features: str) -> pd.DataFrame:
         }
     )
     if features == "core+advanced":
+        _dd = np.float64(3.5)
         base.update(
             {
-                "defender_distance_ft": 3.5,
-                "def_contest_open_bucket": 1.0,
+                "defender_distance_ft": float(_dd),
+                "def_contest_open_bucket": float(contest_bucket_ix(np.asarray([_dd]))[0]),
                 "defender_rel_angle_rad": 0.2,
-                "defender_geom_known": 0,
-                "dribbles_before_shot": 0.0,
+                "dribbles_before_shot": 0.85,
                 "touch_time_sec": 1.2,
                 "elapsed_game_sec_approx": 2400.0,
                 "player_load_game_min_approx": 40.0,
                 "rest_days_since_prev_game": 2.0,
                 "is_back_to_back": 0,
-                "tracking_merge_ok": 1,
+                "time_since_catch": 0.85,
+                "distance_traveled_before_shot": 1.15,
             }
         )
     row = pd.DataFrame([base])[num]
