@@ -13,3 +13,5 @@ data/raw/
 data/processed/
 artifacts/
 *.parquet
+webapp/node_modules/
+webapp/dist/

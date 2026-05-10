@@ -13,6 +13,7 @@ from xshot.datasets import PRIOR_LAST_N_FG_COL, assert_no_forbidden, feature_col
 from xshot.features.advanced import add_advanced_features
 from xshot.features.core import add_core_features
 from xshot.features.tracking_synth import synth_scalar_def_xy_inches
+from xshot.viz.lab_advanced import apply_lab_advanced_overrides
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -174,6 +175,7 @@ def inference_X_from_payload(
 
     if advanced:
         feat = add_advanced_features(feat)
+        feat = apply_lab_advanced_overrides(feat, payload)
 
     num, cat = feature_columns(features)
     cols = num + cat

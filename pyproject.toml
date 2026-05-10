@@ -20,6 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7.4"]
 accel = ["xgboost>=2.0"]
+viz = ["fastapi>=0.109", "uvicorn[standard]>=0.27"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -31,3 +32,4 @@ testpaths = ["tests"]
 [project.scripts]
 xshot-train = "xshot.training_cli:main"
 xshot-predict-one = "xshot.predict_cli:main"
+xshot-viz = "xshot.viz.server:main"

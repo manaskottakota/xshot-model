@@ -1,0 +1,55 @@
+:root {
+  --bg: #0b0e12;
+  --panel: rgba(26, 30, 36, 0.82);
+  --panel-edge: rgba(220, 230, 240, 0.12);
+  --text: #e8eef6;
+  --muted: rgba(226, 233, 244, 0.55);
+  --accent: rgba(148, 197, 255, 0.35);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    "DM Sans",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background: radial-gradient(1200px 800px at 30% -10%, #152033 0%, var(--bg) 55%);
+  color: var(--text);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.prob-monospace {
+  font-family:
+    "JetBrains Mono",
+    ui-monospace,
+    monospace;
+  letter-spacing: -0.03em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
